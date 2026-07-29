@@ -1,14 +1,17 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { themeRegistry } from '../themes/registry';
 
-export type ThemeId = 'chen-guang' | 'tian-qing' | 'hu-po' | 'na-tie' | 'mo-ye' | 'xing-yun' | 'ji-guang' | 'zi-teng';
+/** 主题 ID — 支持内置和自定义主题 */
+export type ThemeId = string;
 export type Theme = ThemeId | 'system';
 export type ThemeGroup = 'light' | 'dark';
 export type EditorWidth = 'full' | 'wide' | 'normal';
 export type LineHeight = 1 | 1.15 | 1.5 | 2 | 2.5 | 3;
 export type TabBarStyle = 'horizontal' | 'vertical';
 
-export const THEMES: Record<ThemeId, { name: string; group: ThemeGroup }> = {
+/** 内置主题元数据（保证 registry 未初始化时也可用） */
+const BUILTIN_THEMES_META: Record<string, { name: string; group: ThemeGroup }> = {
   'chen-guang': { name: '晨光', group: 'light' },
   'tian-qing': { name: '天青', group: 'light' },
   'hu-po': { name: '琥珀', group: 'light' },
@@ -19,6 +22,31 @@ export const THEMES: Record<ThemeId, { name: string; group: ThemeGroup }> = {
   'zi-teng': { name: '紫藤', group: 'dark' },
 };
 
+/**
+ * 兼容旧版的 THEMES 导出。
+ * 优先从注册表获取（内置 + 用户导入），
+ * 取不到时回退到硬编码内置数据。
+ */
+export const THEMES: Record<string, { name: string; group: ThemeGroup }> = new Proxy(
+  {} as Record<string, { name: string; group: ThemeGroup }>,
+  {
+    get(_, id: string | symbol) {
+      if (typeof id !== 'string') return undefined;
+      const reg = themeRegistry.get(id);
+      if (reg) return { name: reg.name, group: reg.group };
+      return BUILTIN_THEMES_META[id];
+    },
+    has(_, id: string | symbol) {
+      if (typeof id !== 'string') return false;
+      return themeRegistry.has(id) || id in BUILTIN_THEMES_META;
+    },
+    ownKeys() {
+      const regThemes = themeRegistry.getAll().map((t) => t.id);
+      return [...new Set([...Object.keys(BUILTIN_THEMES_META), ...regThemes])];
+    },
+  }
+);
+
 export const EMBED_MAX_DEPTH_MIN = 1;
 export const EMBED_MAX_DEPTH_MAX = 5;
 export const EMBED_MAX_DEPTH_DEFAULT = 3;
@@ -27,11 +55,17 @@ export const EMBED_MAX_COUNT_MIN = 1;
 export const EMBED_MAX_COUNT_MAX = 30;
 export const EMBED_MAX_COUNT_DEFAULT = 5;
 
-function getThemeGroup(themeId: ThemeId): ThemeGroup {
-  return THEMES[themeId].group;
+function getThemeMeta(themeId: string): { name: string; group: ThemeGroup } | undefined {
+  const reg = themeRegistry.get(themeId);
+  if (reg) return { name: reg.name, group: reg.group };
+  return BUILTIN_THEMES_META[themeId];
 }
 
-function resolveSystemThemeId(): ThemeId {
+function getThemeGroup(themeId: string): ThemeGroup {
+  return getThemeMeta(themeId)?.group ?? 'light';
+}
+
+function resolveSystemThemeId(): string {
   const state = useSettingsStore.getState();
   return window.matchMedia('(prefers-color-scheme: dark)').matches
     ? state.systemDarkTheme
@@ -92,11 +126,11 @@ export const useSettingsStore = create<SettingsState>()(
         const currentGroup = getThemeGroup(current);
         set({ theme: currentGroup === 'dark' ? 'tian-qing' : 'mo-ye' });
       },
-      setSystemLightTheme: (themeId: ThemeId) => {
-        if (THEMES[themeId].group === 'light') set({ systemLightTheme: themeId });
+      setSystemLightTheme: (themeId: string) => {
+        if (getThemeGroup(themeId) === 'light') set({ systemLightTheme: themeId });
       },
-      setSystemDarkTheme: (themeId: ThemeId) => {
-        if (THEMES[themeId].group === 'dark') set({ systemDarkTheme: themeId });
+      setSystemDarkTheme: (themeId: string) => {
+        if (getThemeGroup(themeId) === 'dark') set({ systemDarkTheme: themeId });
       },
       setImageDirectory: (dir: string) => set({ imageDirectory: dir }),
       setAutoSave: (enabled: boolean) => set({ autoSave: enabled }),

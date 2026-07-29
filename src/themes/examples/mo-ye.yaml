@@ -1,0 +1,145 @@
+# ============================================
+# TMD Type-Markdown 主题示例 — 墨夜（暗色）
+# ============================================
+# 暗色主题需要 group: dark
+# 导入后会自动应用于 Tailwind dark 模式
+# ============================================
+
+name: 墨夜
+group: dark
+preview:
+  - "#0f172a"
+  - "#60a5fa"
+  - "#e2e8f0"
+description: 默认暗色主题，深邃的墨蓝色
+
+variables:
+  # 暗色主题使用反转的主色调（深→浅）
+  primary-50: "#0f172a"
+  primary-100: "#1e293b"
+  primary-200: "#334155"
+  primary-300: "#475569"
+  primary-400: "#64748b"
+  primary-500: "#94a3b8"
+  primary-600: "#cbd5e1"
+  primary-700: "#e2e8f0"
+  primary-800: "#f1f5f9"
+  primary-900: "#f8fafc"
+
+  accent-50: "#eff6ff"
+  accent-100: "#dbeafe"
+  accent-200: "#bfdbfe"
+  accent-300: "#93c5fd"
+  accent-400: "#60a5fa"
+  accent-500: "#3b82f6"
+  accent-600: "#2563eb"
+  accent-700: "#1d4ed8"
+  accent-800: "#1e40af"
+
+  success-500: "#22c55e"
+  success-600: "#16a34a"
+  warning-500: "#f59e0b"
+  warning-600: "#d97706"
+  error-500: "#ef4444"
+  error-600: "#dc2626"
+
+  # 编辑器 — 深色背景 + 浅色文字
+  editor-bg: "#0f172a"
+  editor-surface: "#1e293b"
+  editor-text: "#e2e8f0"
+  editor-text-secondary: "#94a3b8"
+  editor-text-muted: "#64748b"
+  editor-border: "#334155"
+  editor-border-focus: "#60a5fa"
+  editor-code-bg: "#1e293b"
+  editor-heading: "#f8fafc"
+  editor-link: "#60a5fa"
+  editor-accent: "#60a5fa"
+  editor-quote-bg: rgba(96, 165, 250, 0.1)
+  editor-selection: rgba(96, 165, 250, 0.2)
+
+  sidebar-bg: "#1e293b"
+  sidebar-surface: "#334155"
+  sidebar-text: "#e2e8f0"
+  sidebar-text-muted: "#64748b"
+  sidebar-hover: "#334155"
+  sidebar-active: "#475569"
+  sidebar-border: "#334155"
+
+  toolbar-bg: "#1e293b"
+  toolbar-hover: "#334155"
+  toolbar-active: "#475569"
+
+  tab-bg: "#1e293b"
+  tab-active-bg: "#0f172a"
+  tab-inactive-bg: "#1a2332"
+  tab-hover-bg: "#243044"
+  tab-border: "#334155"
+  tab-active-indicator: "#60a5fa"
+
+  titlebar-bg: "#1e293b"
+  statusbar-bg: "#1e293b"
+  statusbar-text: "#94a3b8"
+
+  # 暗色阴影更明显
+  shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.2)
+  shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.3), 0 2px 4px -2px rgb(0 0 0 / 0.2)
+  shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.3), 0 4px 6px -4px rgb(0 0 0 / 0.2)
+
+  radius-sm: 4px
+  radius-md: 6px
+  radius-lg: 8px
+  radius-xl: 12px
+
+  transition-fast: 150ms ease
+  transition-normal: 200ms ease
+  transition-slow: 300ms ease
+
+  # 语法高亮 — 暗色版
+  hljs-comment: "#64748b"
+  hljs-keyword: "#f472b6"
+  hljs-string: "#a5d6ff"
+  hljs-attr: "#a5d6ff"
+  hljs-number: "#dab55f"
+  hljs-title: "#60a5fa"
+  hljs-function: "#93c5fd"
+  hljs-params: "#94a3b8"
+  hljs-variable: "#fbbf24"
+  hljs-class: "#86efac"
+  hljs-meta: "#e2e8f0"
+  hljs-deletion: "#fca5a5"
+  hljs-regexp: "#67e8f9"
+  hljs-selector-class: "#fda4af"
+  hljs-selector-id: "#c4b5fd"
+  hljs-link: "#93c5fd"
+  hljs-addition: "#f472b6"
+  hljs-built_in: "#dab55f"
+  hljs-literal: "#dab55f"
+  hljs-type: "#dab55f"
+  hljs-symbol: "#86efac"
+  hljs-bullet: "#86efac"
+
+  code-inline-bg: "#1e3a5f"
+  code-inline-text: "#93c5fd"
+  code-block-bg: "#1e293b"
+  code-block-container-bg: "#0f172a"
+  code-block-text: "#e2e8f0"
+
+  scrollbar-track: "#2d2d2d"
+  scrollbar-thumb: "#666"
+
+  alert-note-border: "#4493f8"
+  alert-note-bg: rgba(68, 147, 248, 0.1)
+  alert-note-text: "#4493f8"
+  alert-tip-border: "#3fb950"
+  alert-tip-bg: rgba(63, 185, 80, 0.1)
+  alert-tip-text: "#3fb950"
+  alert-important-border: "#a371f7"
+  alert-important-bg: rgba(163, 113, 247, 0.1)
+  alert-important-text: "#a371f7"
+  alert-warning-border: "#d29922"
+  alert-warning-bg: rgba(210, 153, 34, 0.1)
+  alert-warning-text: "#d29922"
+  alert-caution-border: "#f85149"
+  alert-caution-bg: rgba(248, 81, 73, 0.1)
+  alert-caution-text: "#f85149"

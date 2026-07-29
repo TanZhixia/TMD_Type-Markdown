@@ -9,7 +9,8 @@ import {
   Command,
   LucideIcon
 } from 'lucide-react';
-import { useSettingsStore } from '../../stores';
+import { useSettingsStore, THEMES } from '../../stores';
+import { themeRegistry } from '../../themes/registry';
 import { ThemePanel } from '../ThemePanel/ThemePanel';
 import { ShortcutsPanel } from '../Shortcuts/ShortcutsPanel';
 
@@ -17,10 +18,28 @@ import { ShortcutsPanel } from '../Shortcuts/ShortcutsPanel';
  * 顶部工具栏组件
  * 现代化设计 - 使用 SVG 图标，清晰分组，优雅悬停效果
  */
+function getCurrentThemeName(): string {
+  const { theme, systemLightTheme, systemDarkTheme } = useSettingsStore.getState();
+  const effectiveId = theme === 'system'
+    ? window.matchMedia('(prefers-color-scheme: dark)').matches ? systemDarkTheme : systemLightTheme
+    : theme;
+  const t = themeRegistry.get(effectiveId);
+  return t?.name ?? THEMES[effectiveId]?.name ?? effectiveId;
+}
+
 export const Toolbar: React.FC = () => {
   const { handleNewFile, handleOpenFile, handleOpenFolder } = useFileOperations();
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showThemePanel, setShowThemePanel] = useState(false);
+  const [_, forceUpdate] = useState(0);
+
+  // 主题改变时刷新
+  React.useEffect(() => {
+    const unsub = useSettingsStore.subscribe(() => {
+      forceUpdate(n => n + 1);
+    });
+    return unsub;
+  }, []);
 
   return (
     <>
@@ -73,11 +92,21 @@ export const Toolbar: React.FC = () => {
 
           {/* 主题切换 */}
           <div className="relative">
-            <ToolbarButton
-              icon={Palette}
-              title="主题"
+            <button
+              className="
+                group relative flex items-center gap-1.5
+                pl-2 pr-2.5 h-8 rounded-md
+                transition-all duration-[var(--transition-fast)]
+                text-[var(--editor-text-secondary)] hover:bg-[var(--toolbar-hover)] hover:text-[var(--editor-text)]
+                active:bg-[var(--toolbar-active)]
+                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-500)]
+              "
               onClick={() => setShowThemePanel(!showThemePanel)}
-            />
+              title={`当前主题: ${getCurrentThemeName()}`}
+            >
+              <Palette size={16} className="transition-transform duration-[var(--transition-fast)] group-hover:scale-110" />
+              <span className="text-[11px] max-w-[48px] truncate">{getCurrentThemeName()}</span>
+            </button>
             {showThemePanel && (
               <ThemePanel onClose={() => setShowThemePanel(false)} />
             )}

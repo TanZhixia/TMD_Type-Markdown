@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useEditorStore, useSettingsStore, useUpdateStore, useSplitStore } from '../../stores';
+import { useEditorStore, useSettingsStore, useUpdateStore, useSplitStore, THEMES } from '../../stores';
 import { useSaveToFile, useSaveAsFile, getFileName } from '../../hooks/useAutoSave';
 import { isTauriCached } from '../../utils/platform';
 import { FileText, X, Save, SaveAll, Palette, Keyboard, Settings, Minus, Square, Copy, X as CloseIcon, LucideIcon, Plus, ArrowUpCircle, Columns, Rows, ChevronLeft, ChevronRight, PanelRight } from 'lucide-react';
 import { ShortcutsPanel } from '../Shortcuts/ShortcutsPanel';
 import { useFileOperations } from '../../hooks/useFileOperations';
+import { themeRegistry } from '../../themes/registry';
 import { UpdateNotification } from '../Update/UpdateNotification';
 import { CloseTabConfirm } from '../Editor/CloseTabConfirm';
 import { TabContextMenu } from '../Tabs/TabContextMenu';
@@ -30,6 +31,15 @@ const getTauriWindow = () => {
   return null;
 };
 
+function getCurrentThemeName(): string {
+  const { theme, systemLightTheme, systemDarkTheme } = useSettingsStore.getState();
+  const effectiveId = theme === 'system'
+    ? window.matchMedia('(prefers-color-scheme: dark)').matches ? systemDarkTheme : systemLightTheme
+    : theme;
+  const t = themeRegistry.get(effectiveId);
+  return t?.name ?? THEMES[effectiveId]?.name ?? effectiveId;
+}
+
 export const TitleBar: React.FC = () => {
   const tabs = useEditorStore((state) => state.tabs);
   const activeDocPath = useEditorStore((state) => state.activeDocPath);
@@ -54,6 +64,15 @@ export const TitleBar: React.FC = () => {
   const setTabBarStyle = useSettingsStore((state) => state.setTabBarStyle);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showUpdateDialog, setShowUpdateDialog] = useState(false);
+  const [, forceRerender] = useState(0);
+
+  // 主题改变时刷新当前主题名显示
+  useEffect(() => {
+    const unsub = useSettingsStore.subscribe(() => {
+      forceRerender(n => n + 1);
+    });
+    return unsub;
+  }, []);
   const [isMaximized, setIsMaximized] = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [pendingCloseTab, setPendingCloseTab] = useState<string | null>(null);
@@ -555,11 +574,25 @@ export const TitleBar: React.FC = () => {
           />
 
           <div className="relative">
-            <TitleBarButton
-              icon={Palette}
-              title="主题"
-              onClick={() => setShowThemePanel(!showThemePanel)}
-            />
+            <button
+              className="
+                flex items-center justify-center gap-1
+                w-auto px-2 h-8 rounded-md mx-0.5
+                transition-all duration-[var(--transition-fast)]
+                hover:bg-[var(--toolbar-hover)]
+                text-[var(--editor-text-secondary)] hover:text-[var(--editor-text)]
+              "
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                setShowThemePanel(!showThemePanel);
+              }}
+              onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+              title={`当前主题: ${getCurrentThemeName()}`}
+            >
+              <Palette size={14} />
+              <span className="text-[11px] max-w-[48px] truncate">{getCurrentThemeName()}</span>
+            </button>
             {showThemePanel && (
               <ThemePanel onClose={() => setShowThemePanel(false)} />
             )}

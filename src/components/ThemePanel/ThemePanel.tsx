@@ -1,29 +1,38 @@
-import React, { useEffect, useRef } from 'react';
-import { Monitor, Sun, Moon } from 'lucide-react';
-import { useSettingsStore, THEMES, ThemeId, ThemeGroup, Theme } from '../../stores/settingsStore';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { Monitor, Sun, Moon, Upload, CheckCircle2, AlertCircle, X, Trash2 } from 'lucide-react';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { themeRegistry } from '../../themes/registry';
+import { importThemeFromFile } from '../../themes/yamlLoader';
+import { persistCustomThemes } from '../../themes/persistence';
+import { BUILTIN_THEME_IDS } from '../../themes';
+import type { ThemeDefinition, ThemeGroup } from '../../themes/types';
 
 interface ThemePanelProps {
-  embedded?: boolean;  // 嵌入模式（SettingsPanel中使用），不显示浮层外壳
-  onClose?: () => void; // 浮层模式关闭回调
+  embedded?: boolean;
+  onClose?: () => void;
 }
 
-// 每个主题的预览配色
-const THEME_PREVIEW_COLORS: Record<ThemeId, string[]> = {
-  'chen-guang': ['#ffffff', '#3b82f6', '#1e293b'],
-  'tian-qing': ['#f8fafc', '#3b82f6', '#334155'],
-  'hu-po': ['#FAF9F5', '#D97757', '#141413'],
-  'na-tie': ['#eff1f5', '#1e66f5', '#4c4f69'],
-  'mo-ye': ['#0f172a', '#60a5fa', '#e2e8f0'],
-  'xing-yun': ['#282c34', '#61afef', '#abb2bf'],
-  'ji-guang': ['#2e3440', '#88c0d0', '#d8dee9'],
-  'zi-teng': ['#282A36', '#BD93F9', '#F8F8F2'],
-};
+/** 从注册表获取主题列表，按 light/dark 分组 */
+function getThemeGroups(): { label: string; key: ThemeGroup; themes: ThemeDefinition[] }[] {
+  const all = themeRegistry.getAll();
+  return [
+    { label: 'Light', key: 'light', themes: all.filter((t) => t.group === 'light') },
+    { label: 'Dark', key: 'dark', themes: all.filter((t) => t.group === 'dark') },
+  ];
+}
 
-// 按组分类的主题列表
-const THEME_GROUPS: { label: string; key: ThemeGroup; themeIds: ThemeId[] }[] = [
-  { label: 'Light', key: 'light', themeIds: ['chen-guang', 'tian-qing', 'hu-po', 'na-tie'] },
-  { label: 'Dark', key: 'dark', themeIds: ['mo-ye', 'xing-yun', 'ji-guang', 'zi-teng'] },
-];
+/** 获取主题预览颜色（3 点色块） */
+function getPreviewColors(theme: ThemeDefinition): string[] {
+  if (theme.preview && theme.preview.length >= 3) {
+    return theme.preview.slice(0, 3);
+  }
+  const v = theme.variables;
+  return [
+    v['editor-bg'] || '#ffffff',
+    v['accent-500'] || '#3b82f6',
+    v['editor-text'] || '#1e293b',
+  ];
+}
 
 export const ThemePanel: React.FC<ThemePanelProps> = ({ embedded = false, onClose }) => {
   const theme = useSettingsStore((s) => s.theme);
@@ -33,8 +42,48 @@ export const ThemePanel: React.FC<ThemePanelProps> = ({ embedded = false, onClos
   const setSystemLightTheme = useSettingsStore((s) => s.setSystemLightTheme);
   const setSystemDarkTheme = useSettingsStore((s) => s.setSystemDarkTheme);
   const panelRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [, forceUpdate] = useState(0);
 
-  // 浮层模式下，点击面板外区域关闭
+  const [importStatus, setImportStatus] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
+
+  const refreshThemes = useCallback(() => {
+    forceUpdate((n) => n + 1);
+  }, []);
+
+  const isBuiltin = useCallback((id: string) => {
+    return (BUILTIN_THEME_IDS as readonly string[]).includes(id);
+  }, []);
+
+  const handleDeleteTheme = useCallback((e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    const target = themeRegistry.get(id);
+    if (!target) return;
+
+    const group = target.group;
+
+    if (theme === id) {
+      const fallback = group === 'dark' ? 'mo-ye' : 'tian-qing';
+      setTheme(fallback);
+    }
+
+    // 如果系统模式的子主题刚好是它，也重置
+    if (systemLightTheme === id) {
+      setSystemLightTheme('tian-qing');
+    }
+    if (systemDarkTheme === id) {
+      setSystemDarkTheme('mo-ye');
+    }
+
+    themeRegistry.remove(id);
+    persistCustomThemes();
+    refreshThemes();
+  }, [theme, systemLightTheme, systemDarkTheme, setTheme, setSystemLightTheme, setSystemDarkTheme, refreshThemes]);
+
+  // 浮层模式点击外部关闭
   useEffect(() => {
     if (embedded) return;
 
@@ -50,7 +99,6 @@ export const ThemePanel: React.FC<ThemePanelProps> = ({ embedded = false, onClos
       }
     };
 
-    // 延迟绑定，避免触发按钮的点击事件立即关闭面板
     const timerId = setTimeout(() => {
       document.addEventListener('mousedown', handleClickOutside);
       document.addEventListener('keydown', handleEscape);
@@ -63,121 +111,189 @@ export const ThemePanel: React.FC<ThemePanelProps> = ({ embedded = false, onClos
     };
   }, [embedded, onClose]);
 
-  // 选中判断：如果 theme === 'system'，则没有任何具体主题被选中
-  const isSelected = (themeId: ThemeId) => theme === themeId;
-  const isSystemSelected = () => theme === 'system';
+  // 导入 YAML
+  const handleImportYaml = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
 
-  // 主题卡片内容
-  const ThemeCardContent: React.FC<{ themeId: ThemeId }> = ({ themeId }) => {
-    const themeInfo = THEMES[themeId];
-    const colors = THEME_PREVIEW_COLORS[themeId];
-    const active = isSelected(themeId);
+  const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-    return (
-      <button
-        className={`
-          flex flex-col items-center justify-center rounded-lg p-2
-          transition-all duration-[var(--transition-fast)] cursor-pointer
-          bg-[var(--editor-surface)]
-          hover:bg-[var(--sidebar-hover)]
-          ${active ? 'ring-2 ring-[var(--accent-500)] bg-[var(--sidebar-hover)]' : ''}
-        `}
-        style={{
-          borderWidth: active ? '2px' : '0px',
-          borderStyle: 'solid',
-          borderColor: active ? 'var(--accent-500)' : 'transparent',
-        }}
-        onClick={() => setTheme(themeId)}
-        title={themeInfo.name}
-      >
-        {/* 颜色圆点 */}
-        <div className="flex items-center gap-1.5 mb-1.5">
-          {colors.slice(0, 3).map((color, idx) => (
-            <span
-              key={idx}
-              className="inline-block rounded-full"
-              style={{
-                width: 10,
-                height: 10,
-                backgroundColor: color,
-                boxShadow: '0 0 0 1px rgba(0,0,0,0.08)',
-              }}
-            />
-          ))}
-        </div>
-        {/* 主题名称 */}
-        <span
-          className="text-[12px] leading-tight font-medium"
-          style={{ color: 'var(--editor-text)' }}
-        >
-          {themeInfo.name}
-        </span>
-        {/* Light/Dark 标签 */}
-        <span
-          className="text-[10px] leading-tight mt-0.5"
-          style={{ color: 'var(--editor-text-muted)' }}
-        >
-          {themeInfo.group === 'light' ? 'Light' : 'Dark'}
-        </span>
-      </button>
-    );
-  };
+    const file = files[0];
+    if (!file.name.endsWith('.yaml') && !file.name.endsWith('.yml')) {
+      setImportStatus({ type: 'error', message: '请选择 .yaml 或 .yml 文件' });
+      return;
+    }
 
-  // 面板内容（嵌入模式和浮层模式共用）
+    setImportStatus(null);
+    const result = await importThemeFromFile(file);
+
+    if (result.success) {
+      setImportStatus({
+        type: 'success',
+        message: `主题「${result.theme.name}」导入成功`,
+      });
+      refreshThemes();
+      setTheme(result.theme.id);
+    } else {
+      setImportStatus({ type: 'error', message: result.error });
+    }
+
+    e.target.value = '';
+  }, [refreshThemes, setTheme]);
+
+  useEffect(() => {
+    if (!importStatus) return;
+    const timer = setTimeout(() => setImportStatus(null), 3000);
+    return () => clearTimeout(timer);
+  }, [importStatus]);
+
+  const themeGroups = getThemeGroups();
+  const isSystemSelected = theme === 'system';
+
+  // ======= 面板共享内容 =======
   const panelContent = (
     <div className="p-3">
-      {/* 主题网格 */}
-      {THEME_GROUPS.map((group) => (
-        <div key={group.key} className="mb-3 last:mb-0">
-          {/* 组标题 */}
-          <div
-            className="text-[11px] font-medium mb-2 uppercase tracking-wider"
-            style={{ color: 'var(--editor-text-muted)' }}
-          >
-            {group.label}
-          </div>
-          {/* 3列网格 */}
-          <div className="grid grid-cols-4 gap-2">
-            {group.themeIds.map((themeId) => (
-              <ThemeCardContent key={themeId} themeId={themeId} />
-            ))}
-          </div>
-        </div>
-      ))}
-
-      {/* 分隔线 */}
-      <div
-        className="my-3 border-t"
-        style={{ borderColor: 'var(--editor-border)' }}
+      {/* 隐藏文件选择器 */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".yaml,.yml"
+        style={{ display: 'none' }}
+        onChange={handleFileChange}
       />
 
-      {/* 跟随系统选项 */}
+      {/* 导入状态 */}
+      {importStatus && (
+        <div
+          className={`
+            flex items-center gap-2 px-3 py-2 mb-3 rounded-lg text-[12px]
+            animate-slide-down
+            ${importStatus.type === 'success'
+              ? 'bg-[var(--success-500)]/10 text-[var(--success-500)]'
+              : 'bg-[var(--error-500)]/10 text-[var(--error-500)]'
+            }
+          `}
+        >
+          {importStatus.type === 'success' ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
+          <span className="flex-1">{importStatus.message}</span>
+          <button className="opacity-60 hover:opacity-100" onClick={() => setImportStatus(null)}>
+            <X size={12} />
+          </button>
+        </div>
+      )}
+
+      {/* 主题网格 */}
+      {themeGroups.map((group) => {
+        if (group.themes.length === 0) return null;
+        return (
+          <div key={group.key} className="mb-3 last:mb-0">
+            <div
+              className="text-[11px] font-medium mb-2 uppercase tracking-wider"
+              style={{ color: 'var(--editor-text-muted)' }}
+            >
+              {group.label}
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {group.themes.map((t) => {
+                const active = theme === t.id;
+                const colors = getPreviewColors(t);
+                return (
+                  <div key={t.id} className="relative group">
+                    {!isBuiltin(t.id) && (
+                      <button
+                        className="
+                          absolute -top-1 -right-1 z-10
+                          w-4 h-4 rounded-full
+                          flex items-center justify-center
+                          opacity-0 group-hover:opacity-100
+                          transition-opacity duration-[var(--transition-fast)]
+                          bg-[var(--error-500)] text-white
+                          hover:bg-[var(--error-600)]
+                          shadow-sm
+                        "
+                        onClick={(e) => handleDeleteTheme(e, t.id)}
+                        title={`删除「${t.name}」`}
+                      >
+                        <X size={8} strokeWidth={3} />
+                      </button>
+                    )}
+                    <button
+                      className={`
+                        flex flex-col items-center justify-center rounded-lg p-2
+                        transition-all duration-[var(--transition-fast)] cursor-pointer
+                        bg-[var(--editor-surface)]
+                        hover:bg-[var(--sidebar-hover)]
+                        w-full
+                        ${active ? 'ring-2 ring-[var(--accent-500)] bg-[var(--sidebar-hover)]' : ''}
+                      `}
+                      style={{
+                        borderWidth: active ? '2px' : '0px',
+                        borderStyle: 'solid',
+                        borderColor: active ? 'var(--accent-500)' : 'transparent',
+                      }}
+                      onClick={() => setTheme(t.id)}
+                      title={t.name}
+                    >
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        {colors.slice(0, 3).map((color, idx) => (
+                          <span
+                            key={idx}
+                            className="inline-block rounded-full"
+                            style={{ width: 10, height: 10, backgroundColor: color, boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }}
+                          />
+                        ))}
+                      </div>
+                      <span className="text-[12px] leading-tight font-medium" style={{ color: 'var(--editor-text)' }}>
+                        {t.name}
+                      </span>
+                      <span className="text-[10px] leading-tight mt-0.5" style={{ color: 'var(--editor-text-muted)' }}>
+                        {t.group === 'light' ? 'Light' : 'Dark'}
+                      </span>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+
+      {/* 导入 YAML 按钮 */}
+      <button
+        className="w-full flex items-center gap-2 px-2 py-2 rounded-lg mb-2 transition-all duration-[var(--transition-fast)] cursor-pointer text-[var(--accent-500)] hover:bg-[var(--sidebar-hover)] border border-dashed border-[var(--editor-border)]"
+        onClick={handleImportYaml}
+        title="导入 YAML 主题文件"
+      >
+        <Upload size={14} />
+        <span className="text-[12px] font-medium">导入 YAML 主题</span>
+      </button>
+
+      {/* 分隔线 */}
+      <div className="my-3 border-t" style={{ borderColor: 'var(--editor-border)' }} />
+
+      {/* 跟随系统 */}
       <button
         className={`
           w-full flex items-center gap-2 px-2 py-2 rounded-lg
           transition-all duration-[var(--transition-fast)] cursor-pointer
           hover:bg-[var(--sidebar-hover)]
-          ${isSystemSelected() ? 'ring-2 ring-[var(--accent-500)] bg-[var(--sidebar-hover)]' : ''}
+          ${isSystemSelected ? 'ring-2 ring-[var(--accent-500)] bg-[var(--sidebar-hover)]' : ''}
         `}
         style={{
-          borderWidth: isSystemSelected() ? '2px' : '0px',
+          borderWidth: isSystemSelected ? '2px' : '0px',
           borderStyle: 'solid',
-          borderColor: isSystemSelected() ? 'var(--accent-500)' : 'transparent',
+          borderColor: isSystemSelected ? 'var(--accent-500)' : 'transparent',
         }}
         onClick={() => setTheme('system')}
       >
         <Monitor size={16} style={{ color: 'var(--editor-text-secondary)' }} />
-        <span
-          className="text-[13px] font-medium"
-          style={{ color: 'var(--editor-text)' }}
-        >
+        <span className="text-[13px] font-medium" style={{ color: 'var(--editor-text)' }}>
           跟随系统
         </span>
-        {isSystemSelected() && (
-          <span
-            className="ml-auto inline-block w-4 h-4 rounded-full"
-            style={{ backgroundColor: 'var(--accent-500)' }}
-          >
+        {isSystemSelected && (
+          <span className="ml-auto inline-block w-4 h-4 rounded-full" style={{ backgroundColor: 'var(--accent-500)' }}>
             <svg viewBox="0 0 16 16" fill="white" className="w-4 h-4">
               <path d="M12.5 4.5L6 11l-2.5-2.5 1-1L6 9l5.5-5.5 1 1z" />
             </svg>
@@ -185,47 +301,45 @@ export const ThemePanel: React.FC<ThemePanelProps> = ({ embedded = false, onClos
         )}
       </button>
 
-      {/* 跟随系统时的明/暗子选择器 */}
-      {isSystemSelected() && (
+      {/* 亮/暗子选择器 */}
+      {isSystemSelected && (
         <div className="mt-2 space-y-2 pl-2">
-          {/* 亮色主题选择 */}
           <div className="flex items-center gap-2">
             <Sun size={13} style={{ color: 'var(--editor-text-muted)' }} />
             <span className="text-[11px]" style={{ color: 'var(--editor-text-muted)' }}>亮色</span>
-            <div className="flex gap-1 flex-1 justify-end">
-              {THEME_GROUPS.find(g => g.key === 'light')!.themeIds.map(tid => (
+            <div className="flex gap-1 flex-1 justify-end flex-wrap">
+              {themeRegistry.getLightThemes().map((t) => (
                 <button
-                  key={tid}
+                  key={t.id}
                   className="rounded px-1.5 py-0.5 text-[11px] transition-all cursor-pointer"
                   style={{
-                    backgroundColor: systemLightTheme === tid ? 'var(--accent-500)' : 'var(--editor-surface)',
-                    color: systemLightTheme === tid ? 'white' : 'var(--editor-text-secondary)',
-                    border: `1px solid ${systemLightTheme === tid ? 'var(--accent-500)' : 'var(--editor-border)'}`,
+                    backgroundColor: systemLightTheme === t.id ? 'var(--accent-500)' : 'var(--editor-surface)',
+                    color: systemLightTheme === t.id ? 'white' : 'var(--editor-text-secondary)',
+                    border: `1px solid ${systemLightTheme === t.id ? 'var(--accent-500)' : 'var(--editor-border)'}`,
                   }}
-                  onClick={() => setSystemLightTheme(tid)}
+                  onClick={() => setSystemLightTheme(t.id)}
                 >
-                  {THEMES[tid].name}
+                  {t.name}
                 </button>
               ))}
             </div>
           </div>
-          {/* 暗色主题选择 */}
           <div className="flex items-center gap-2">
             <Moon size={13} style={{ color: 'var(--editor-text-muted)' }} />
             <span className="text-[11px]" style={{ color: 'var(--editor-text-muted)' }}>暗色</span>
-            <div className="flex gap-1 flex-1 justify-end">
-              {THEME_GROUPS.find(g => g.key === 'dark')!.themeIds.map(tid => (
+            <div className="flex gap-1 flex-1 justify-end flex-wrap">
+              {themeRegistry.getDarkThemes().map((t) => (
                 <button
-                  key={tid}
+                  key={t.id}
                   className="rounded px-1.5 py-0.5 text-[11px] transition-all cursor-pointer"
                   style={{
-                    backgroundColor: systemDarkTheme === tid ? 'var(--accent-500)' : 'var(--editor-surface)',
-                    color: systemDarkTheme === tid ? 'white' : 'var(--editor-text-secondary)',
-                    border: `1px solid ${systemDarkTheme === tid ? 'var(--accent-500)' : 'var(--editor-border)'}`,
+                    backgroundColor: systemDarkTheme === t.id ? 'var(--accent-500)' : 'var(--editor-surface)',
+                    color: systemDarkTheme === t.id ? 'white' : 'var(--editor-text-secondary)',
+                    border: `1px solid ${systemDarkTheme === t.id ? 'var(--accent-500)' : 'var(--editor-border)'}`,
                   }}
-                  onClick={() => setSystemDarkTheme(tid)}
+                  onClick={() => setSystemDarkTheme(t.id)}
                 >
-                  {THEMES[tid].name}
+                  {t.name}
                 </button>
               ))}
             </div>
@@ -235,12 +349,12 @@ export const ThemePanel: React.FC<ThemePanelProps> = ({ embedded = false, onClos
     </div>
   );
 
-  // 嵌入模式：只渲染内容
+  // 嵌入模式：只渲染内容（用于 SettingsPanel）
   if (embedded) {
     return panelContent;
   }
 
-  // 浮层模式：渲染浮层外壳
+  // 浮层模式：渲染外壳
   return (
     <div
       ref={panelRef}
