@@ -45,3 +45,6 @@ src-tauri/target/
 # Neutralino (alternative desktop option)
 .bin/
 .tmp/
+
+# Claude
+.claude/
