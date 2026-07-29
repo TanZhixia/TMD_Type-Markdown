@@ -4,7 +4,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const svgPath = join(__dirname, '../design/monzo.svg');
+const svgPath = join(__dirname, '../design/app-icon.svg');
 const iconsDir = join(__dirname, '../src-tauri/icons');
 
 // 创建 icons 目录
